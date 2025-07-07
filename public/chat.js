@@ -1,7 +1,8 @@
 /**
- * LLM Chat App Frontend
+ * LLM Chat App Frontend - FINAL VERSION
  *
- * Handles the chat UI interactions and communication with the backend API.
+ * Handles UI interactions and communication with the backend API,
+ * including model selection and robust stream processing.
  */
 
 // DOM elements
@@ -9,22 +10,12 @@ const chatMessages = document.getElementById("chat-messages");
 const userInput = document.getElementById("user-input");
 const sendButton = document.getElementById("send-button");
 const typingIndicator = document.getElementById("typing-indicator");
+// 新增：获取模型选择下拉框的元素
+const modelSelector = document.getElementById("model");
 
 // Chat state
-let chatHistory = [
-  {
-    role: "assistant",
-    content:
-      "Hello! I'm an LLM chat app powered by Cloudflare Workers AI. How can I help you today?",
-  },
-];
+let chatHistory = []; // 为了保持会话干净，我们每次都从头构建
 let isProcessing = false;
-
-// Auto-resize textarea as user types
-userInput.addEventListener("input", function () {
-  this.style.height = "auto";
-  this.style.height = this.scrollHeight + "px";
-});
 
 // Send message on Enter (without Shift)
 userInput.addEventListener("keydown", function (e) {
@@ -37,106 +28,90 @@ userInput.addEventListener("keydown", function (e) {
 // Send button click handler
 sendButton.addEventListener("click", sendMessage);
 
+// 初始化时添加欢迎语
+addMessageToChat(
+  "assistant",
+  "Hello! I'm an LLM chat app powered by Cloudflare Workers AI. How can I help you today?"
+);
+
 /**
  * Sends a message to the chat API and processes the response
  */
 async function sendMessage() {
   const message = userInput.value.trim();
-
-  // Don't send empty messages
   if (message === "" || isProcessing) return;
 
-  // Disable input while processing
   isProcessing = true;
   userInput.disabled = true;
   sendButton.disabled = true;
 
-  // Add user message to chat
   addMessageToChat("user", message);
+  chatHistory.push({ role: 'user', content: message });
 
-  // Clear input
   userInput.value = "";
-  userInput.style.height = "auto";
-
-  // Show typing indicator
   typingIndicator.classList.add("visible");
 
-  // Add message to history
-  chatHistory.push({ role: "user", content: message });
-
   try {
-    // Create new assistant response element
-    const assistantMessageEl = document.createElement("div");
-    assistantMessageEl.className = "message assistant-message";
-    assistantMessageEl.innerHTML = "<p></p>";
-    chatMessages.appendChild(assistantMessageEl);
+    // 新增：获取用户当前选择的模型
+    const selectedModel = modelSelector.value;
 
-    // Scroll to bottom
-    chatMessages.scrollTop = chatMessages.scrollHeight;
+    const assistantMessageEl = addMessageToChat("assistant", ""); // 创建一个空的AI消息气泡
+    let responseText = "";
 
     // Send request to API
     const response = await fetch("/api/chat", {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
+        // 修改：将选择的模型名称和聊天历史一起发送
+        model: selectedModel,
         messages: chatHistory,
       }),
     });
 
-    // Handle errors
     if (!response.ok) {
-      throw new Error("Failed to get response");
+      throw new Error(`Failed to get response. Status: ${response.status}`);
     }
+
+    typingIndicator.classList.remove("visible");
 
     // Process streaming response
     const reader = response.body.getReader();
     const decoder = new TextDecoder();
-    let responseText = "";
 
     while (true) {
       const { done, value } = await reader.read();
+      if (done) break;
 
-      if (done) {
-        break;
-      }
-
-      // Decode chunk
       const chunk = decoder.decode(value, { stream: true });
 
-      // Process SSE format
+      // 修改：使用更健壮的逻辑来解析标准的SSE数据流
       const lines = chunk.split("\n");
       for (const line of lines) {
-        try {
-          const jsonData = JSON.parse(line);
-          if (jsonData.response) {
-            // Append new content to existing text
-            responseText += jsonData.response;
-            assistantMessageEl.querySelector("p").textContent = responseText;
-
-            // Scroll to bottom
-            chatMessages.scrollTop = chatMessages.scrollHeight;
+        if (line.startsWith("data: ")) {
+          try {
+            const dataStr = line.substring(5).trim();
+            if (dataStr === '[DONE]') break;
+            const jsonData = JSON.parse(dataStr);
+            if (jsonData.response) {
+              responseText += jsonData.response;
+              assistantMessageEl.textContent = responseText;
+              chatMessages.scrollTop = chatMessages.scrollHeight;
+            }
+          } catch (e) {
+            // 忽略JSON解析错误，因为数据块可能不完整
           }
-        } catch (e) {
-          console.error("Error parsing JSON:", e);
         }
       }
     }
+    // 将完整的AI回复添加到历史记录
+    chatHistory.push({ role: 'assistant', content: responseText });
 
-    // Add completed response to chat history
-    chatHistory.push({ role: "assistant", content: responseText });
   } catch (error) {
     console.error("Error:", error);
-    addMessageToChat(
-      "assistant",
-      "Sorry, there was an error processing your request.",
-    );
-  } finally {
-    // Hide typing indicator
+    addMessageToChat("assistant", `Sorry, there was an error: ${error.message}`);
     typingIndicator.classList.remove("visible");
-
-    // Re-enable input
+  } finally {
     isProcessing = false;
     userInput.disabled = false;
     sendButton.disabled = false;
@@ -146,13 +121,13 @@ async function sendMessage() {
 
 /**
  * Helper function to add message to chat
+ * @returns {HTMLElement} The created message element's content paragraph.
  */
 function addMessageToChat(role, content) {
   const messageEl = document.createElement("div");
   messageEl.className = `message ${role}-message`;
-  messageEl.innerHTML = `<p>${content}</p>`;
+  messageEl.textContent = content; // 直接设置文本内容
   chatMessages.appendChild(messageEl);
-
-  // Scroll to bottom
   chatMessages.scrollTop = chatMessages.scrollHeight;
+  return messageEl; // 返回这个消息元素，以便后续更新
 }

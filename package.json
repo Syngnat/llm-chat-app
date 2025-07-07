@@ -18,9 +18,11 @@
     "publish": true
   },
   "devDependencies": {
+    "@cloudflare/ai": "^1.2.2",
     "@cloudflare/vitest-pool-workers": "0.8.44",
-    "@cloudflare/workers-types": "^4.20250425.0",
+    "@cloudflare/workers-types": "^4.20250705.0",
     "@types/node": "24.0.4",
+    "base64-js": "^1.5.1",
     "typescript": "5.8.3",
     "vitest": "3.2.4",
     "wrangler": "4.21.x"
