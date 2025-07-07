@@ -5,56 +5,314 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>LLM Chat App</title>
     <style>
+      /* Creamy Style Color Palette */
       :root {
-        --primary-color: #f6821f;
-        --primary-hover: #e67e22;
-        --light-bg: #f9fafb;
-        --border-color: #e5e7eb;
-        --text-color: #1f2937;
-        --text-light: #6b7280;
-        --user-msg-bg: #fff2e6;
-        --assistant-msg-bg: #f3f4f6;
-        --code-bg: #e5e7eb;
+        --primary-color: #FFA07A; /* 珊瑚橙 */
+        --primary-hover: #FF8C69;
+        --light-bg: #FDFBF8; /* 整体页面背景 */
+        --card-bg: #FFFFFF;   /* 卡片背景 */
+        --border-color: #E0DCD7; /* 柔和边框 */
+        --text-color: #333333; /* 主文本色 */
+        --text-light: #888888; /* 次要文本色 */
+        --user-msg-bg: #FFEFD5; /* 用户消息气泡 */
+        --assistant-msg-bg: #FFFFFF; /* AI消息气泡 */
+        --code-bg: #F0F0EE; /* 代码块背景 */
+        --danger-color: #EF4444; /* 停止按钮 */
+        --danger-hover: #DC2626;
+        --modal-bg: rgba(0, 0, 0, 0.4); /* 模态框背景 */
+        --modal-content-bg: #fff;
+        --shadow-light: 0px 4px 15px rgba(0, 0, 0, 0.05); /* 轻微阴影 */
+        --shadow-medium: 0px 8px 25px rgba(0, 0, 0, 0.08); /* 中等阴影 */
+        --shadow-strong: 0px 12px 30px rgba(0, 0, 0, 0.2); /* 强阴影 */
       }
       * { box-sizing: border-box; margin: 0; padding: 0; }
       body {
         font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
         line-height: 1.6;
         color: var(--text-color);
-        max-width: 800px;
-        margin: 0 auto;
-        padding: 1rem;
+        background-color: var(--light-bg);
+        display: flex;
+        flex-direction: column;
+        min-height: 100vh; /* Ensure body takes full viewport height */
+        align-items: center; /* Center content horizontally */
+        padding: 1.5rem; /* Reduced overall padding for more space */
       }
-      header { text-align: center; margin-bottom: 1rem; padding: 1rem 0; border-bottom: 1px solid var(--border-color); }
-      h1 { font-size: 1.5rem; color: var(--primary-color); }
-      .config-container { display: flex; flex-direction: column; align-items: center; gap: 0.75rem; margin-bottom: 1rem; }
-      .config-item { display: flex; align-items: center; gap: 0.5rem; width: 100%; max-width: 500px; }
-      .config-item label { color: var(--text-light); flex-shrink: 0; }
-      .config-item select, .config-item input { width: 100%; padding: 0.25rem 0.5rem; border-radius: 4px; border: 1px solid var(--border-color); background-color: #fff; }
-      .chat-container { display: flex; flex-direction: column; height: calc(100vh - 280px); min-height: 400px; border: 1px solid var(--border-color); border-radius: 8px; overflow: hidden; }
-      .chat-messages { flex: 1; overflow-y: auto; padding: 1rem; background-color: var(--light-bg); }
-      .message { margin-bottom: 1rem; padding: 0.75rem 1rem; border-radius: 8px; max-width: 80%; word-wrap: break-word; line-height: 1.6; }
-      .user-message { background-color: var(--user-msg-bg); align-self: flex-end; margin-left: auto; }
-      .assistant-message { background-color: var(--assistant-msg-bg); align-self: flex-start; }
-      .message-input { display: flex; padding: 0.75rem; border-top: 1px solid var(--border-color); background-color: white; }
-      #user-input { flex: 1; padding: 0.75rem; border: 1px solid var(--border-color); border-radius: 4px; font-family: inherit; resize: none; min-height: 44px; }
-      #send-button { margin-left: 0.5rem; padding: 0 1rem; background-color: var(--primary-color); color: white; border: none; border-radius: 4px; cursor: pointer; transition: background-color 0.2s; }
-      #send-button:hover { background-color: var(--primary-hover); }
-      #send-button:disabled { background-color: var(--text-light); cursor: not-allowed; }
-      .typing-indicator { display: none; margin-bottom: 1rem; padding: 0 1rem; font-style: italic; color: var(--text-light); }
-      .typing-indicator.visible { display: block; }
-      footer { margin-top: 1rem; text-align: center; font-size: 0.85rem; color: var(--text-light); }
+
+      header { 
+        text-align: center; 
+        margin-bottom: 2rem; /* Reduced margin */
+        padding-bottom: 1rem; 
+        width: 100%;
+        max-width: 1200px; /* Align with main content */
+      }
+      h1 { font-size: 2rem; color: var(--text-color); margin-bottom: 0.5rem; }
+      header p { color: var(--text-light); font-size: 0.95rem; }
+
+      /* START: Main Layout Container (Three Columns Logic) */
+      .app-container {
+        display: flex;
+        flex-grow: 1; /* Allow it to take available vertical space */
+        width: 100%;
+        max-width: 1400px; /* Increased overall max width for the three-column layout */
+        gap: 1.5rem; /* Spacing between columns */
+        justify-content: center;
+        padding-bottom: 1.5rem; /* Padding before footer */
+
+        /* Responsive - stack columns on small screens */
+        @media (max-width: 1024px) { /* Adjust breakpoint for 3 columns to 1 column */
+          flex-direction: column;
+          gap: 1.5rem;
+          max-width: 95%;
+          padding-bottom: 1rem;
+        }
+      }
+
+      /* Left Sidebar (Config) */
+      .sidebar-config {
+        display: flex;
+        flex-direction: column;
+        flex-shrink: 0; /* Prevent shrinking */
+        width: 280px; /* Fixed width for sidebar */
+        background-color: var(--card-bg);
+        border-radius: 12px;
+        box-shadow: var(--shadow-medium);
+        padding: 1.5rem;
+        align-self: flex-start; /* Align to the top */
+        height: auto; /* Allow height to adjust to content */
+      }
+      .sidebar-config h2 {
+        font-size: 1.2rem;
+        color: var(--text-color);
+        margin-bottom: 1rem;
+        padding-bottom: 0.5rem;
+        border-bottom: 1px solid var(--border-color);
+      }
+      .sidebar-config .config-group {
+        display: flex;
+        flex-direction: column;
+        gap: 1rem;
+        margin-bottom: 1.5rem;
+      }
+      .sidebar-config .config-item {
+        display: flex;
+        flex-direction: column; /* Stack label and select/input vertically */
+        align-items: flex-start;
+        gap: 0.5rem;
+        width: 100%;
+      }
+      .sidebar-config .config-item label {
+        color: var(--text-light);
+        font-weight: 500;
+        font-size: 0.9rem;
+      }
+      .sidebar-config .config-item select, 
+      .sidebar-config .config-item input {
+        width: 100%; 
+        padding: 0.5rem 0.75rem; 
+        border-radius: 8px; 
+        border: 1px solid var(--border-color); 
+        background-color: #fff;
+        font-size: 0.95rem;
+        color: var(--text-color);
+        box-shadow: inset 0px 1px 3px rgba(0, 0, 0, 0.05);
+      }
+
+      /* Chat Container (Middle Column) */
+      .chat-container {
+        display: flex;
+        flex-direction: column;
+        flex-grow: 1; /* Take all remaining space */
+        height: 100%; /* Take full height of app-container */
+        min-height: 600px; /* Aligned with overall height expectation */
+        background-color: var(--card-bg);
+        border-radius: 12px;
+        box-shadow: var(--shadow-medium);
+        overflow: hidden;
+      }
+      /* END: Main Layout Container */
+
+      /* Responsive Adjustments for Layout */
+      @media (max-width: 1024px) { /* Adjust breakpoint for 3 columns to 1 column */
+        .app-container {
+          flex-direction: column; /* Stack vertically on small screens */
+          gap: 1rem;
+          padding-bottom: 1rem;
+          max-width: 100%;
+        }
+        .sidebar-config {
+          width: 100%; /* Full width */
+          max-width: 100%;
+          order: -1; /* Move to top on small screens */
+          padding: 1rem;
+          height: auto;
+          flex-direction: row; /* Make config items horizontal on small screens for better use of space */
+          flex-wrap: wrap; /* Allow items to wrap */
+          justify-content: center;
+        }
+        .sidebar-config h2 {
+          display: none; /* Hide heading on small screens if layout changes */
+        }
+        .sidebar-config .config-group {
+          flex-direction: row; /* Make config group items horizontal too */
+          flex-wrap: wrap;
+          gap: 0.75rem;
+          margin-bottom: 0;
+          width: 100%;
+          justify-content: center;
+        }
+        .sidebar-config .config-item {
+          flex-direction: row; /* Label and select/input side-by-side */
+          align-items: center;
+          gap: 0.5rem;
+          width: auto; /* Auto width */
+          flex-grow: 1; /* Allow them to grow */
+          margin-bottom: 0.5rem;
+        }
+        .sidebar-config .config-item:last-child { margin-bottom: 0; }
+        .sidebar-config .config-item label {
+          margin-bottom: 0;
+        }
+        .chat-container {
+          min-height: 500px; /* Adjust min height for small screens */
+          height: auto;
+          flex-grow: 1;
+        }
+      }
+
+      /* Rest of the styles remain the same or minor consistency tweaks */
+      .chat-messages { flex: 1; overflow-y: auto; padding: 1.5rem; background-color: var(--light-bg); }
+      .message { margin-bottom: 1.25rem; padding: 1rem 1.25rem; border-radius: 10px; max-width: 90%; word-wrap: break-word; line-height: 1.7; font-size: 0.95rem; box-shadow: 0px 2px 8px rgba(0, 0, 0, 0.04); }
+      .user-message { background-color: var(--user-msg-bg); margin-left: auto; }
+      .assistant-message { background-color: var(--assistant-msg-bg); }
+      .message-input { display: flex; padding: 1rem; border-top: 1px solid var(--border-color); background-color: var(--card-bg); }
+      #user-input { 
+        flex: 1; 
+        padding: 0.75rem; 
+        border: 1px solid var(--border-color); 
+        border-radius: 8px; 
+        font-family: inherit; 
+        resize: none; 
+        min-height: 48px; 
+        max-height: 160px; 
+        overflow-y: auto; 
+        font-size: 1rem; 
+        box-shadow: inset 0px 1px 3px rgba(0, 0, 0, 0.05);
+      }
       
-      /* START: New Styles for Markdown Content */
-      .assistant-message p { margin-bottom: 1rem; }
+      /* Action Buttons */
+      .action-buttons { display: flex; flex-direction: column; gap: 0.75rem; margin-left: 0.75rem; }
+      .action-buttons button {
+        padding: 0.75rem 1.25rem;
+        height: auto; 
+        min-height: 48px; 
+        border: none;
+        border-radius: 8px;
+        cursor: pointer;
+        transition: background-color 0.2s, box-shadow 0.2s;
+        font-size: 0.95rem;
+        font-weight: 600;
+        white-space: nowrap;
+      }
+      #send-button { background-color: var(--primary-color); color: white; }
+      #send-button:hover { background-color: var(--primary-hover); box-shadow: var(--shadow-light); }
+      #send-button:disabled { background-color: var(--text-light); cursor: not-allowed; }
+      #cancel-button { background-color: var(--danger-color); color: white; display: none; }
+      #cancel-button:hover { background-color: var(--danger-hover); box-shadow: var(--shadow-light); }
+      
+      /* Typing Indicator */
+      .typing-indicator { display: none; margin-bottom: 1rem; padding: 0 1.5rem; font-style: italic; color: var(--text-light); }
+      .typing-indicator.visible { display: block; }
+      footer { 
+        margin-top: 2rem; 
+        text-align: center; 
+        font-size: 0.85rem; 
+        color: var(--text-light); 
+        width: 100%;
+        max-width: 1200px; /* Align with app-container max-width */
+      }
+      
+      /* Markdown Content Styling */
+      .assistant-message p { margin-bottom: 0.8rem; }
       .assistant-message p:last-child { margin-bottom: 0; }
-      .assistant-message pre { background-color: var(--code-bg); color: var(--text-color); padding: 1rem; border-radius: 4px; overflow-x: auto; margin: 0.5rem 0 1rem 0; }
+      .assistant-message pre { background-color: var(--code-bg); color: var(--text-color); padding: 1rem; border-radius: 6px; overflow-x: auto; margin: 0.75rem 0 1rem 0; font-size: 0.9rem; }
       .assistant-message code { font-family: 'Courier New', Courier, monospace; background-color: var(--code-bg); padding: 0.2rem 0.4rem; border-radius: 4px; }
       .assistant-message pre code { background-color: transparent; padding: 0; }
-      .assistant-message ul, .assistant-message ol { padding-left: 1.5rem; margin-bottom: 1rem; }
-      .assistant-message li { margin-bottom: 0.5rem; }
-      .assistant-message blockquote { border-left: 3px solid var(--primary-color); padding-left: 1rem; margin: 0.5rem 0 1rem 0; color: var(--text-light); }
-      /* END: New Styles for Markdown Content */
+      .assistant-message ul, .assistant-message ol { padding-left: 1.75rem; margin-bottom: 1rem; }
+      .assistant-message li { margin-bottom: 0.6rem; }
+      .assistant-message blockquote { border-left: 4px solid var(--primary-color); padding-left: 1.25rem; margin: 0.75rem 0 1rem 0; color: var(--text-light); font-style: italic; }
+
+      /* Modal Styles */
+      .modal-overlay {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background-color: var(--modal-bg);
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        z-index: 1000;
+        visibility: hidden;
+        opacity: 0;
+        transition: visibility 0.2s, opacity 0.2s ease-in-out;
+      }
+      .modal-overlay.visible {
+        visibility: visible;
+        opacity: 1;
+      }
+      .prompt-modal {
+        background-color: var(--card-bg);
+        padding: 2rem;
+        border-radius: 12px;
+        box-shadow: var(--shadow-strong);
+        width: 90%;
+        max-width: 550px;
+        transform: translateY(-20px);
+        transition: transform 0.2s ease-in-out;
+      }
+      .modal-overlay.visible .prompt-modal {
+        transform: translateY(0);
+      }
+      .prompt-modal h2 {
+        font-size: 1.5rem;
+        color: var(--text-color);
+        margin-bottom: 1.5rem;
+        text-align: center;
+      }
+      .prompt-modal textarea {
+        width: 100%;
+        min-height: 120px;
+        max-height: 300px;
+        padding: 0.75rem;
+        border: 1px solid var(--border-color);
+        border-radius: 8px;
+        font-family: inherit;
+        font-size: 0.95rem;
+        resize: vertical;
+        box-shadow: inset 0px 1px 3px rgba(0, 0, 0, 0.05);
+        margin-bottom: 1.5rem;
+        color: var(--text-color);
+        background-color: var(--light-bg);
+      }
+      .modal-actions {
+        display: flex;
+        justify-content: flex-end;
+        gap: 0.75rem;
+      }
+      .modal-actions button {
+        padding: 0.6rem 1.2rem;
+        border: none;
+        border-radius: 8px;
+        cursor: pointer;
+        font-size: 0.9rem;
+        font-weight: 600;
+        transition: background-color 0.2s, box-shadow 0.2s;
+      }
+      #save-prompt-button { background-color: var(--primary-color); color: white; }
+      #save-prompt-button:hover { background-color: var(--primary-hover); box-shadow: var(--shadow-light); }
+      #cancel-prompt-button { background-color: var(--border-color); color: var(--text-color); }
+      #cancel-prompt-button:hover { background-color: #D0CCC8; box-shadow: var(--shadow-light); }
     </style>
   </head>
   <body>
@@ -63,37 +321,65 @@
       <p>Powered by Cloudflare Workers AI</p>
     </header>
 
-    <div class="config-container">
-      <div class="config-item">
-        <label for="model">AI Model:</label>
-        <select id="model">
-          <option value="llama" selected>Llama 3.1 (Cloudflare)</option>
-          <option value="gemini">Gemini 2.5 Flash (Google)</option>
-        </select>
+    <!-- START: Main App Container - Now with Sidebar and Chat Area -->
+    <div class="app-container">
+      <!-- Left Sidebar for Configuration -->
+      <div class="sidebar-config">
+        <h2>Settings</h2>
+        <div class="config-group">
+          <div class="config-item">
+            <label for="model">AI Model:</label>
+            <select id="model">
+              <option value="llama" selected>Llama 3.1 (Cloudflare)</option>
+              <option value="gemini">Gemini 1.5 Flash (Google)</option>
+            </select>
+          </div>
+          <div class="config-item">
+            <label for="prompt-preset">Prompt Preset:</label>
+            <select id="prompt-preset">
+              <option value="default" selected>Default Assistant</option>
+              <option value="programmer">Programmer (Sarcastic)</option>
+              <option value="pirate">Pirate (Helpful)</option>
+              <option value="custom">Custom Prompt...</option>
+            </select>
+          </div>
+        </div>
+        <!-- You can add more setting groups here if needed -->
       </div>
-      <div class="config-item">
-        <label for="system-prompt">Custom Prompt:</label>
-        <input type="text" id="system-prompt" placeholder="Optional: e.g., You are a helpful pirate.">
-      </div>
-    </div>
 
-    <div class="chat-container">
-      <div id="chat-messages" class="chat-messages"></div>
-      <div class="typing-indicator" id="typing-indicator">AI is thinking...</div>
-      <form id="chat-form" class="message-input">
-        <textarea id="user-input" placeholder="Type your message here..." rows="1" autofocus></textarea>
-        <button type="submit" id="send-button">Send</button>
-      </form>
+      <!-- Main Chat Area (Right Column) -->
+      <div class="chat-container">
+        <div id="chat-messages" class="chat-messages"></div>
+        <div class="typing-indicator" id="typing-indicator">AI is thinking...</div>
+        <form id="chat-form" class="message-input">
+          <textarea id="user-input" placeholder="Type your message here..." rows="1" autofocus></textarea>
+          <div class="action-buttons">
+              <button type="submit" id="send-button">Send</button>
+              <button type="button" id="cancel-button">Stop</button>
+          </div>
+        </form>
+      </div>
     </div>
+    <!-- END: Main App Container -->
 
     <footer>
       <p>Cloudflare Workers AI Chat Template © 2025</p>
     </footer>
 
-    <!-- START: Key Change - Add Markdown and Sanitizer libraries -->
+    <!-- Modal for Custom Prompt -->
+    <div id="prompt-modal-overlay" class="modal-overlay">
+      <div class="prompt-modal">
+        <h2>Edit Custom Prompt</h2>
+        <textarea id="custom-prompt-editor" placeholder="Enter your custom system prompt here. This will be saved locally."></textarea>
+        <div class="modal-actions">
+          <button id="cancel-prompt-button">Cancel</button>
+          <button id="save-prompt-button">Save Prompt</button>
+        </div>
+      </div>
+    </div>
+
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/dompurify/dist/purify.min.js"></script>
-    <!-- END: Key Change -->
 
     <script src="chat.js"></script>
   </body>

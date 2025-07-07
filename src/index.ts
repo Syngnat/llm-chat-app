@@ -25,15 +25,15 @@ export default {
 // --- 聊天请求分发器 ---
 async function handleChatRequest(request: Request, env: Env): Promise<Response> {
   try {
-    // START: Key Change - Expect systemPrompt from the frontend
     const requestBody = await request.json<{ model?: string; systemPrompt?: string; messages: ChatMessage[] }>();
-    // END: Key Change
     const model = requestBody.model || 'llama';
+    
+    const signal = request.signal; 
 
     if (model.toLowerCase().includes('gemini')) {
-      return handleGeminiRequest(requestBody, env);
+      return handleGeminiRequest(requestBody, env, signal); 
     } else {
-      return handleLlamaRequest(requestBody, env);
+      return handleLlamaRequest(requestBody, env, signal); 
     }
   } catch (error) {
     return new Response("Invalid request body", { status: 400 });
@@ -41,59 +41,40 @@ async function handleChatRequest(request: Request, env: Env): Promise<Response> 
 }
 
 // --- Llama 模型处理器 ---
-async function handleLlamaRequest(body: { systemPrompt?: string; messages: ChatMessage[] }, env: Env): Promise<Response> {
+async function handleLlamaRequest(body: { systemPrompt?: string; messages: ChatMessage[] }, env: Env, signal?: AbortSignal): Promise<Response> {
   const ai = new Ai(env.AI);
-  const { messages = [], systemPrompt } = body;
+  const { messages = [], systemPrompt } = body; 
   
-  // START: Key Change - Use custom prompt if provided, otherwise use default
   const finalSystemPrompt = systemPrompt || SYSTEM_PROMPT;
   if (!messages.some((msg) => msg.role === "system")) {
     messages.unshift({ role: "system", content: finalSystemPrompt });
   }
-  // END: Key Change
 
-  const responseStream = await ai.run(LLAMA_MODEL_ID, { messages, stream: true });
+  const responseStream = await ai.run(LLAMA_MODEL_ID, { messages, stream: true }, { signal: signal });
   return new Response(responseStream, { headers: { 'content-type': 'text/event-stream' } });
 }
 
-// --- Gemini 模型处理器 (终极提示词生效版) ---
-async function handleGeminiRequest(body: { systemPrompt?: string; messages: ChatMessage[] }, env: Env): Promise<Response> {
-  const { messages = [], systemPrompt } = body;
+// --- Gemini 模型处理器 (务实稳定版) ---
+async function handleGeminiRequest(body: { systemPrompt?: string; messages: ChatMessage[] }, env: Env, signal?: AbortSignal): Promise<Response> {
+  const { messages = [], systemPrompt } = body; 
+  const geminiMessages = messages.map(msg => {
+    if (msg.role === 'system') return null;
+    if (msg.role === 'assistant') return { role: 'model', parts: [{ text: msg.content }] };
+    return { role: 'user', parts: [{ text: msg.content }] };
+  }).filter(Boolean);
 
-  // **【关键修复：重新构建 Gemini 消息数组】**
-  let geminiContents: { role: string; parts: { text: string }[] }[] = [];
-
-  // 1. 如果存在系统提示词，将其作为对话的第一个用户消息注入
-  if (systemPrompt && systemPrompt.trim() !== '') {
-    geminiContents.push({ role: 'user', parts: [{ text: `[系统指令]: ${systemPrompt.trim()}` }] });
-    // 为了满足 Gemini 的 user/model 交替要求，添加一个空的 model 响应
-    geminiContents.push({ role: 'model', parts: [{ text: '好的，我已理解您的指令。' }] }); // 可以是空字符串，这里为了清晰加了回复
+  if (geminiMessages.length === 0 || geminiMessages[geminiMessages.length -1].role !== 'user') {
+    return new Response(JSON.stringify({ error: "Invalid history for Gemini" }), { status: 400 });
   }
 
-  // 2. 遍历实际的聊天历史，并转换为 Gemini 的格式
-  for (const msg of messages) {
-    if (msg.role === 'user') {
-      geminiContents.push({ role: 'user', parts: [{ text: msg.content }] });
-    } else if (msg.role === 'assistant') { // 注意：将 assistant 映射为 model
-      geminiContents.push({ role: 'model', parts: [{ text: msg.content }] });
-    }
-    // 忽略原始 messages 中的 'system' 角色，因为我们已经通过 systemPrompt 处理了
-  }
-
-  // 检查确保至少有一个用户消息（防止只有系统提示词而没有实际用户提问）
-  if (geminiContents.length === 0 || geminiContents[geminiContents.length - 1].role !== 'user') {
-      // 这是一个安全检查，确保最后一条消息是用户，或者至少有用户消息。
-      // 否则，如果只设置了systemPrompt但没有实际用户输入，可能会导致API问题
-      // 实际上，如果前端按预期发送了 messages，这里不会触发
-  }
-
-  const geminiPayload = { contents: geminiContents };
+  const geminiPayload = { contents: geminiMessages };
 
   try {
     const geminiResponse = await fetch(GEMINI_GATEWAY_URL, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'x-goog-api-key': 'AIzaSyAHNAY-pb8EqB5mR9aV9MV4k0dcIlHSAnw' },
       body: JSON.stringify(geminiPayload),
+      signal: signal, // 将 signal 传递给 fetch
     });
 
     if (!geminiResponse.ok) {
@@ -102,18 +83,17 @@ async function handleGeminiRequest(body: { systemPrompt?: string; messages: Chat
       return new Response(JSON.stringify({ error: `Gemini API Error: ${errorBody}` }), { status: 500 });
     }
 
-    // 【保持前端模拟流式所需的后端一次性发送逻辑】
-    const responseData = await geminiResponse.json(); 
+    const responseData: any | any[] = await geminiResponse.json(); 
     let fullResponseText = "";
     if (Array.isArray(responseData)) {
         for (const item of responseData) {
-            const textPart = item?.candidates?.[0]?.content?.parts?.[0]?.text;
+            const textPart = (item as any)?.candidates?.[0]?.content?.parts?.[0]?.text;
             if (typeof textPart === 'string') {
                 fullResponseText += textPart;
             }
         }
-    } else { 
-        const textPart = responseData?.candidates?.[0]?.content?.parts?.[0]?.text;
+    } else {
+        const textPart = (responseData as any)?.candidates?.[0]?.content?.parts?.[0]?.text;
         if (typeof textPart === 'string') {
             fullResponseText += textPart;
         }
@@ -127,6 +107,10 @@ async function handleGeminiRequest(body: { systemPrompt?: string; messages: Chat
     });
 
   } catch (e: any) {
+    if (e.name === 'AbortError') {
+        console.log("Backend fetch aborted successfully.");
+        return new Response("Request aborted", { status: 499 });
+    }
     console.error(`Fatal error in handleGeminiRequest: ${e.message}`, e);
     return new Response(JSON.stringify({ error: `Fatal Error: ${e.message}` }), { status: 500 });
   }

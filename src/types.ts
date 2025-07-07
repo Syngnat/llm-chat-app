@@ -12,7 +12,7 @@ export interface Env {
    * START: Add this line
    * Binding for the Google API Key secret.
    */
-  GOOGLE_API_KEY: "AIzaSyAHNAY-pb8EqB5mR9aV9MV4k0dcIlHSAnw";
+  GOOGLE_API_KEY: string;
 
   /**
    * Binding for static assets.

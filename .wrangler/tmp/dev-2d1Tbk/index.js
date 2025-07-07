@@ -1206,13 +1206,13 @@ var require_base64_js = __commonJS({
   }
 });
 
-// .wrangler/tmp/bundle-58TUm0/middleware-loader.entry.ts
+// .wrangler/tmp/bundle-EJ01gg/middleware-loader.entry.ts
 init_modules_watch_stub();
 init_virtual_unenv_global_polyfill_cloudflare_unenv_preset_node_process();
 init_virtual_unenv_global_polyfill_cloudflare_unenv_preset_node_console();
 init_performance2();
 
-// .wrangler/tmp/bundle-58TUm0/middleware-insertion-facade.js
+// .wrangler/tmp/bundle-EJ01gg/middleware-insertion-facade.js
 init_modules_watch_stub();
 init_virtual_unenv_global_polyfill_cloudflare_unenv_preset_node_process();
 init_virtual_unenv_global_polyfill_cloudflare_unenv_preset_node_console();
@@ -1901,49 +1901,46 @@ async function handleChatRequest(request, env2) {
   try {
     const requestBody = await request.json();
     const model = requestBody.model || "llama";
+    const signal = request.signal;
     if (model.toLowerCase().includes("gemini")) {
-      return handleGeminiRequest(requestBody, env2);
+      return handleGeminiRequest(requestBody, env2, signal);
     } else {
-      return handleLlamaRequest(requestBody, env2);
+      return handleLlamaRequest(requestBody, env2, signal);
     }
   } catch (error3) {
     return new Response("Invalid request body", { status: 400 });
   }
 }
 __name(handleChatRequest, "handleChatRequest");
-async function handleLlamaRequest(body, env2) {
+async function handleLlamaRequest(body, env2, signal) {
   const ai = new W(env2.AI);
   const { messages = [], systemPrompt } = body;
   const finalSystemPrompt = systemPrompt || SYSTEM_PROMPT;
   if (!messages.some((msg) => msg.role === "system")) {
     messages.unshift({ role: "system", content: finalSystemPrompt });
   }
-  const responseStream = await ai.run(LLAMA_MODEL_ID, { messages, stream: true });
+  const responseStream = await ai.run(LLAMA_MODEL_ID, { messages, stream: true }, { signal });
   return new Response(responseStream, { headers: { "content-type": "text/event-stream" } });
 }
 __name(handleLlamaRequest, "handleLlamaRequest");
-async function handleGeminiRequest(body, env2) {
+async function handleGeminiRequest(body, env2, signal) {
   const { messages = [], systemPrompt } = body;
-  let geminiContents = [];
-  if (systemPrompt && systemPrompt.trim() !== "") {
-    geminiContents.push({ role: "user", parts: [{ text: `[\u7CFB\u7EDF\u6307\u4EE4]: ${systemPrompt.trim()}` }] });
-    geminiContents.push({ role: "model", parts: [{ text: "\u597D\u7684\uFF0C\u6211\u5DF2\u7406\u89E3\u60A8\u7684\u6307\u4EE4\u3002" }] });
+  const geminiMessages = messages.map((msg) => {
+    if (msg.role === "system") return null;
+    if (msg.role === "assistant") return { role: "model", parts: [{ text: msg.content }] };
+    return { role: "user", parts: [{ text: msg.content }] };
+  }).filter(Boolean);
+  if (geminiMessages.length === 0 || geminiMessages[geminiMessages.length - 1].role !== "user") {
+    return new Response(JSON.stringify({ error: "Invalid history for Gemini" }), { status: 400 });
   }
-  for (const msg of messages) {
-    if (msg.role === "user") {
-      geminiContents.push({ role: "user", parts: [{ text: msg.content }] });
-    } else if (msg.role === "assistant") {
-      geminiContents.push({ role: "model", parts: [{ text: msg.content }] });
-    }
-  }
-  if (geminiContents.length === 0 || geminiContents[geminiContents.length - 1].role !== "user") {
-  }
-  const geminiPayload = { contents: geminiContents };
+  const geminiPayload = { contents: geminiMessages };
   try {
     const geminiResponse = await fetch(GEMINI_GATEWAY_URL, {
       method: "POST",
       headers: { "Content-Type": "application/json", "x-goog-api-key": "AIzaSyAHNAY-pb8EqB5mR9aV9MV4k0dcIlHSAnw" },
-      body: JSON.stringify(geminiPayload)
+      body: JSON.stringify(geminiPayload),
+      signal
+      // 将 signal 传递给 fetch
     });
     if (!geminiResponse.ok) {
       const errorBody = await geminiResponse.text();
@@ -1973,6 +1970,10 @@ async function handleGeminiRequest(body, env2) {
       headers: { "content-type": "text/event-stream", "cache-control": "no-cache" }
     });
   } catch (e2) {
+    if (e2.name === "AbortError") {
+      console.log("Backend fetch aborted successfully.");
+      return new Response("Request aborted", { status: 499 });
+    }
     console.error(`Fatal error in handleGeminiRequest: ${e2.message}`, e2);
     return new Response(JSON.stringify({ error: `Fatal Error: ${e2.message}` }), { status: 500 });
   }
@@ -2028,7 +2029,7 @@ var jsonError = /* @__PURE__ */ __name(async (request, env2, _ctx, middlewareCtx
 }, "jsonError");
 var middleware_miniflare3_json_error_default = jsonError;
 
-// .wrangler/tmp/bundle-58TUm0/middleware-insertion-facade.js
+// .wrangler/tmp/bundle-EJ01gg/middleware-insertion-facade.js
 var __INTERNAL_WRANGLER_MIDDLEWARE__ = [
   middleware_ensure_req_body_drained_default,
   middleware_miniflare3_json_error_default
@@ -2064,7 +2065,7 @@ function __facade_invoke__(request, env2, ctx, dispatch, finalMiddleware) {
 }
 __name(__facade_invoke__, "__facade_invoke__");
 
-// .wrangler/tmp/bundle-58TUm0/middleware-loader.entry.ts
+// .wrangler/tmp/bundle-EJ01gg/middleware-loader.entry.ts
 var __Facade_ScheduledController__ = class ___Facade_ScheduledController__ {
   constructor(scheduledTime, cron, noRetry) {
     this.scheduledTime = scheduledTime;
