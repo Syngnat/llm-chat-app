@@ -1206,13 +1206,13 @@ var require_base64_js = __commonJS({
   }
 });
 
-// .wrangler/tmp/bundle-JzBLz6/middleware-loader.entry.ts
+// .wrangler/tmp/bundle-58TUm0/middleware-loader.entry.ts
 init_modules_watch_stub();
 init_virtual_unenv_global_polyfill_cloudflare_unenv_preset_node_process();
 init_virtual_unenv_global_polyfill_cloudflare_unenv_preset_node_console();
 init_performance2();
 
-// .wrangler/tmp/bundle-JzBLz6/middleware-insertion-facade.js
+// .wrangler/tmp/bundle-58TUm0/middleware-insertion-facade.js
 init_modules_watch_stub();
 init_virtual_unenv_global_polyfill_cloudflare_unenv_preset_node_process();
 init_virtual_unenv_global_polyfill_cloudflare_unenv_preset_node_console();
@@ -1923,16 +1923,22 @@ async function handleLlamaRequest(body, env2) {
 }
 __name(handleLlamaRequest, "handleLlamaRequest");
 async function handleGeminiRequest(body, env2) {
-  const { messages = [] } = body;
-  const geminiMessages = messages.map((msg) => {
-    if (msg.role === "system") return null;
-    if (msg.role === "assistant") return { role: "model", parts: [{ text: msg.content }] };
-    return { role: "user", parts: [{ text: msg.content }] };
-  }).filter(Boolean);
-  if (geminiMessages.length === 0 || geminiMessages[0].role !== "user") {
-    return new Response(JSON.stringify({ error: "Invalid history for Gemini" }), { status: 400 });
+  const { messages = [], systemPrompt } = body;
+  let geminiContents = [];
+  if (systemPrompt && systemPrompt.trim() !== "") {
+    geminiContents.push({ role: "user", parts: [{ text: `[\u7CFB\u7EDF\u6307\u4EE4]: ${systemPrompt.trim()}` }] });
+    geminiContents.push({ role: "model", parts: [{ text: "\u597D\u7684\uFF0C\u6211\u5DF2\u7406\u89E3\u60A8\u7684\u6307\u4EE4\u3002" }] });
   }
-  const geminiPayload = { contents: geminiMessages };
+  for (const msg of messages) {
+    if (msg.role === "user") {
+      geminiContents.push({ role: "user", parts: [{ text: msg.content }] });
+    } else if (msg.role === "assistant") {
+      geminiContents.push({ role: "model", parts: [{ text: msg.content }] });
+    }
+  }
+  if (geminiContents.length === 0 || geminiContents[geminiContents.length - 1].role !== "user") {
+  }
+  const geminiPayload = { contents: geminiContents };
   try {
     const geminiResponse = await fetch(GEMINI_GATEWAY_URL, {
       method: "POST",
@@ -1941,7 +1947,7 @@ async function handleGeminiRequest(body, env2) {
     });
     if (!geminiResponse.ok) {
       const errorBody = await geminiResponse.text();
-      console.error(`[Gemini Error] Status: ${geminiResponse.status}, Body: ${errorBody}`);
+      console.error(`[Gemini API Error] Status: ${geminiResponse.status}, Body: ${errorBody}`);
       return new Response(JSON.stringify({ error: `Gemini API Error: ${errorBody}` }), { status: 500 });
     }
     const responseData = await geminiResponse.json();
@@ -1964,11 +1970,7 @@ async function handleGeminiRequest(body, env2) {
 
 `;
     return new Response(new TextEncoder().encode(sseFormatted), {
-      headers: {
-        "content-type": "text/event-stream",
-        "cache-control": "no-cache"
-        // 确保浏览器不缓存
-      }
+      headers: { "content-type": "text/event-stream", "cache-control": "no-cache" }
     });
   } catch (e2) {
     console.error(`Fatal error in handleGeminiRequest: ${e2.message}`, e2);
@@ -2026,7 +2028,7 @@ var jsonError = /* @__PURE__ */ __name(async (request, env2, _ctx, middlewareCtx
 }, "jsonError");
 var middleware_miniflare3_json_error_default = jsonError;
 
-// .wrangler/tmp/bundle-JzBLz6/middleware-insertion-facade.js
+// .wrangler/tmp/bundle-58TUm0/middleware-insertion-facade.js
 var __INTERNAL_WRANGLER_MIDDLEWARE__ = [
   middleware_ensure_req_body_drained_default,
   middleware_miniflare3_json_error_default
@@ -2062,7 +2064,7 @@ function __facade_invoke__(request, env2, ctx, dispatch, finalMiddleware) {
 }
 __name(__facade_invoke__, "__facade_invoke__");
 
-// .wrangler/tmp/bundle-JzBLz6/middleware-loader.entry.ts
+// .wrangler/tmp/bundle-58TUm0/middleware-loader.entry.ts
 var __Facade_ScheduledController__ = class ___Facade_ScheduledController__ {
   constructor(scheduledTime, cron, noRetry) {
     this.scheduledTime = scheduledTime;

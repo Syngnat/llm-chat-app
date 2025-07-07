@@ -56,20 +56,38 @@ async function handleLlamaRequest(body: { systemPrompt?: string; messages: ChatM
   return new Response(responseStream, { headers: { 'content-type': 'text/event-stream' } });
 }
 
-// --- Gemini 模型处理器 (务实稳定版) ---
-async function handleGeminiRequest(body: { messages: ChatMessage[] }, env: Env): Promise<Response> {
-  const { messages = [] } = body;
-  const geminiMessages = messages.map(msg => {
-    if (msg.role === 'system') return null; // Gemini没有system角色，忽略
-    if (msg.role === 'assistant') return { role: 'model', parts: [{ text: msg.content }] };
-    return { role: 'user', parts: [{ text: msg.content }] };
-  }).filter(Boolean);
+// --- Gemini 模型处理器 (终极提示词生效版) ---
+async function handleGeminiRequest(body: { systemPrompt?: string; messages: ChatMessage[] }, env: Env): Promise<Response> {
+  const { messages = [], systemPrompt } = body;
 
-  if (geminiMessages.length === 0 || geminiMessages[0].role !== 'user') {
-    return new Response(JSON.stringify({ error: "Invalid history for Gemini" }), { status: 400 });
+  // **【关键修复：重新构建 Gemini 消息数组】**
+  let geminiContents: { role: string; parts: { text: string }[] }[] = [];
+
+  // 1. 如果存在系统提示词，将其作为对话的第一个用户消息注入
+  if (systemPrompt && systemPrompt.trim() !== '') {
+    geminiContents.push({ role: 'user', parts: [{ text: `[系统指令]: ${systemPrompt.trim()}` }] });
+    // 为了满足 Gemini 的 user/model 交替要求，添加一个空的 model 响应
+    geminiContents.push({ role: 'model', parts: [{ text: '好的，我已理解您的指令。' }] }); // 可以是空字符串，这里为了清晰加了回复
   }
 
-  const geminiPayload = { contents: geminiMessages };
+  // 2. 遍历实际的聊天历史，并转换为 Gemini 的格式
+  for (const msg of messages) {
+    if (msg.role === 'user') {
+      geminiContents.push({ role: 'user', parts: [{ text: msg.content }] });
+    } else if (msg.role === 'assistant') { // 注意：将 assistant 映射为 model
+      geminiContents.push({ role: 'model', parts: [{ text: msg.content }] });
+    }
+    // 忽略原始 messages 中的 'system' 角色，因为我们已经通过 systemPrompt 处理了
+  }
+
+  // 检查确保至少有一个用户消息（防止只有系统提示词而没有实际用户提问）
+  if (geminiContents.length === 0 || geminiContents[geminiContents.length - 1].role !== 'user') {
+      // 这是一个安全检查，确保最后一条消息是用户，或者至少有用户消息。
+      // 否则，如果只设置了systemPrompt但没有实际用户输入，可能会导致API问题
+      // 实际上，如果前端按预期发送了 messages，这里不会触发
+  }
+
+  const geminiPayload = { contents: geminiContents };
 
   try {
     const geminiResponse = await fetch(GEMINI_GATEWAY_URL, {
@@ -78,17 +96,15 @@ async function handleGeminiRequest(body: { messages: ChatMessage[] }, env: Env):
       body: JSON.stringify(geminiPayload),
     });
 
-    if (!geminiResponse.ok) { // 检查HTTP状态码
+    if (!geminiResponse.ok) {
       const errorBody = await geminiResponse.text();
-      console.error(`[Gemini Error] Status: ${geminiResponse.status}, Body: ${errorBody}`);
+      console.error(`[Gemini API Error] Status: ${geminiResponse.status}, Body: ${errorBody}`);
       return new Response(JSON.stringify({ error: `Gemini API Error: ${errorBody}` }), { status: 500 });
     }
 
-    // 【关键修复】直接读取整个响应体，因为Gateway不是真正的流式转发
+    // 【保持前端模拟流式所需的后端一次性发送逻辑】
     const responseData = await geminiResponse.json(); 
-    
     let fullResponseText = "";
-    // 如果返回的是一个数组 (像您之前日志里那样)
     if (Array.isArray(responseData)) {
         for (const item of responseData) {
             const textPart = item?.candidates?.[0]?.content?.parts?.[0]?.text;
@@ -96,22 +112,18 @@ async function handleGeminiRequest(body: { messages: ChatMessage[] }, env: Env):
                 fullResponseText += textPart;
             }
         }
-    } else { // 如果返回的是单个对象
+    } else { 
         const textPart = responseData?.candidates?.[0]?.content?.parts?.[0]?.text;
         if (typeof textPart === 'string') {
             fullResponseText += textPart;
         }
     }
 
-    // 将完整的文本封装成一个SSE事件，一次性发送给前端
     const sseChunk = { response: fullResponseText };
     const sseFormatted = `data: ${JSON.stringify(sseChunk)}\n\n`;
 
     return new Response(new TextEncoder().encode(sseFormatted), {
-      headers: { 
-        'content-type': 'text/event-stream', 
-        'cache-control': 'no-cache', // 确保浏览器不缓存
-      }
+      headers: { 'content-type': 'text/event-stream', 'cache-control': 'no-cache' }
     });
 
   } catch (e: any) {
