@@ -4,7 +4,7 @@ import { Ai } from '@cloudflare/ai';
 import { Env, ChatMessage } from './types';
 
 // --- 配置常量 ---
-const LLAMA_MODEL_ID = "@cf/meta/llama-3.1-8b-instruct";
+const LLAMA_MODEL_ID: any = "@cf/meta/llama-3.1-8b-instruct";
 const SYSTEM_PROMPT = "You are a helpful, friendly assistant.";
 const GEMINI_GATEWAY_URL = 'https://gateway.ai.cloudflare.com/v1/f2128e62b71b328cddb70252e4e5f05e/gemini/google-ai-studio/v1beta/models/gemini-2.5-flash:streamGenerateContent';
 
@@ -50,7 +50,7 @@ async function handleLlamaRequest(body: { systemPrompt?: string; messages: ChatM
     messages.unshift({ role: "system", content: finalSystemPrompt });
   }
 
-  const responseStream = await ai.run(LLAMA_MODEL_ID, { messages, stream: true }, { signal: signal });
+  const responseStream = await ai.run(LLAMA_MODEL_ID, { messages, stream: true }) as any;
   return new Response(responseStream, { headers: { 'content-type': 'text/event-stream' } });
 }
 
@@ -61,7 +61,12 @@ async function handleGeminiRequest(body: { systemPrompt?: string; messages: Chat
     if (msg.role === 'system') return null;
     if (msg.role === 'assistant') return { role: 'model', parts: [{ text: msg.content }] };
     return { role: 'user', parts: [{ text: msg.content }] };
-  }).filter(Boolean);
+  }).filter(Boolean) as ({
+    role: string;
+    parts: {
+        text: string;
+    }[];
+})[];
 
   if (geminiMessages.length === 0 || geminiMessages[geminiMessages.length -1].role !== 'user') {
     return new Response(JSON.stringify({ error: "Invalid history for Gemini" }), { status: 400 });
